@@ -2,6 +2,7 @@ package com.breadhardit.travelagencykata;
 
 import com.breadhardit.travelagencykata.domain.Customer;
 import lombok.*;
+import lombok.experimental.SuperBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 
@@ -19,42 +20,67 @@ public class BehavioralPatternExercices {
         - Travels with origin or destination out of schengen space, requires Visa
      */
     @Data
-    public static class Travel {
-        public static final List<String> SCHENGEN_COUNTRIES = List.of("Spain","France","Iceland","Italy","Portugal");
-        String id;
+    @SuperBuilder
+    public static abstract class Travel {
+        @Builder.Default
+        String id = UUID.randomUUID().toString();
         String name;
         String origin;
         String destination;
-        Boolean sameCountryTravel = Boolean.FALSE;
-        Boolean schengenSpaceTravel = Boolean.FALSE;
-        Boolean visaRequiredTravel = Boolean.FALSE;
-        public Travel(String id,String name,String origin,String destination) {
-            if (origin.equals(destination)) this.sameCountryTravel = Boolean.TRUE;
-            else if (SCHENGEN_COUNTRIES.contains(origin) && SCHENGEN_COUNTRIES.contains(destination)) this.schengenSpaceTravel = Boolean.TRUE;
-            else this.visaRequiredTravel = Boolean.TRUE;
+
+        public abstract void scanDocument();
+    }
+
+    @NoArgsConstructor
+    public static class TravelFactory {
+        public static final List<String> SCHENGEN_COUNTRIES = List.of("Spain", "France", "Iceland", "Italy", "Portugal");
+
+        public Travel buildTravel(String name, String origin, String destination) {
+            if (origin.equals(destination)) {
+                return NationalTravel.builder().name(name).origin(origin).destination(destination).build();
+            } else if (SCHENGEN_COUNTRIES.contains(origin) && SCHENGEN_COUNTRIES.contains(destination)) {
+                return SchengenTravel.builder().name(name).origin(origin).destination(destination).build();
+            } else {
+                return InternationalTravel.builder().name(name).origin(origin).destination(destination).build();
+            }
         }
     }
-    public static void scanVisa() {
-        log.info("Applying visa...");
+
+    @SuperBuilder
+    public static class NationalTravel extends Travel {
+        @Override
+        public void scanDocument() {
+            log.info("Scanning DNI...");
+        }
     }
-    public static void scanDNI() {
-        log.info("Applying DNI...");
+
+    @SuperBuilder
+    public static class SchengenTravel extends Travel {
+        @Override
+        public void scanDocument() {
+            log.info("Scanning passport...");
+        }
     }
-    public static void scanPassport() {
-        log.info("Applying Passport");
+
+    @SuperBuilder
+    public static class InternationalTravel extends Travel {
+        @Override
+        public void scanDocument() {
+            log.info("Scanning visa...");
+        }
     }
+
     @Test
     // When customer buy a new Travel we have to scan the proper documentation
     public void travelAgency() {
+        TravelFactory travelFactory = new TravelFactory();
         List<Travel> travels = List.of(
-                new Travel(UUID.randomUUID().toString(),"PYRAMIDS TOUR","Spain","EGYPT"),
-                new Travel(UUID.randomUUID().toString(),"LISBOA TOUR","Spain","Portugal"),
-                new Travel(UUID.randomUUID().toString(),"LISBOA TOUR","Portugal","Portugal")
+                travelFactory.buildTravel("PYRAMIDS TOUR", "Spain", "EGYPT"),
+                travelFactory.buildTravel("LISBOA TOUR", "Spain", "Portugal"),
+                travelFactory.buildTravel("LISBOA TOUR", "Portugal", "Portugal")
         );
-        for (Travel travel: travels) {
-            if (travel.visaRequiredTravel) scanVisa();
-            else if (travel.schengenSpaceTravel) scanPassport();
-            else if (travel.sameCountryTravel) scanDNI();
+        for (Travel travel : travels) {
+            travel.scanDocument();
         }
     }
     // Refactor code using the proper structural pattern
@@ -73,39 +99,60 @@ public class BehavioralPatternExercices {
         @Builder.Default
         Boolean greetingDone = Boolean.FALSE;
     }
-    public static class EmployeesRepository{
-        private static final ConcurrentHashMap<String,Employee> EMPLOYEES = new ConcurrentHashMap<>();
-        public void addEmployee(Employee employee) {
-            EMPLOYEES.put(employee.getId(),employee);
+
+    public interface NotificationObserver {
+        void notifyEmployee();
+    }
+
+    @Value
+    public static class Notificator implements NotificationObserver {
+        EmployeesRepository employeesRepository;
+
+        @Override
+        public void notifyEmployee() {
+            employeesRepository.getUnnotifiedEmployees().forEach(e -> {
+                log.info("Notifying {}", e);
+                e.setGreetingDone(Boolean.TRUE);
+            });
         }
+    }
+
+    public static class EmployeesRepository {
+        private static final ConcurrentHashMap<String, Employee> EMPLOYEES = new ConcurrentHashMap<>();
+
+        public void addEmployee(Employee employee) {
+            EMPLOYEES.put(employee.getId(), employee);
+        }
+
         public List<Employee> getUnnotifiedEmployees() {
             return EMPLOYEES.values().stream().filter(e -> !e.greetingDone).toList();
         }
     }
-    @Value
+
+
+    @Slf4j
     @AllArgsConstructor
     public static class GreetingsNotificator {
-        EmployeesRepository employeesRepository;
+        List<NotificationObserver> observers;
         @SneakyThrows
         public void applyNotifications() {
-            while (true) {
-                log.info("Aplying notifications");
-                List<Employee> employeesToNotify = employeesRepository.getUnnotifiedEmployees();
-                employeesToNotify.forEach(e -> {log.info("Notifying {}", e);e.setGreetingDone(Boolean.TRUE);});
+                log.info("Applying notifications");
+                observers.forEach(NotificationObserver::notifyEmployee);
                 Thread.sleep(100);
-            }
         }
     }
+
     @Test
     @SneakyThrows
     public void companyTest() {
         EmployeesRepository employeesRepository = new EmployeesRepository();
-        GreetingsNotificator greetingsNotificator = new GreetingsNotificator(employeesRepository);
-        new Thread(() -> greetingsNotificator.applyNotifications()).start();
+        Notificator notificator = new Notificator(employeesRepository);
+        GreetingsNotificator greetingsNotificator = new GreetingsNotificator(List.of(notificator));
         Thread.sleep(200);
         employeesRepository.addEmployee(Employee.builder().id("1").name("Pepe").email("pepe@pepemail.com").build());
         Thread.sleep(200);
         employeesRepository.addEmployee(Employee.builder().id("2").name("Juan").email("pepe@pepemail.com").build());
+        new Thread(greetingsNotificator::applyNotifications).start();
     }
     // Use the proper behavioral pattern to avoid the continuous querying to database
 }
