@@ -73,7 +73,7 @@ La interfaz CustomersJPAPRepository es la que interactúa con la base de datos.
 
 ## Y por fin, descripción de la tarea
 
-Como se podrá comprobar al observar las clases, el Port [CustomersRepository](src/main/java/com/breadhardit/travelagencykata/aplication/port/CustomerRepository.java) 
+Como se podrá comprobar al observar las clases, el Port [CustomersRepository](src/main/java/com/breadhardit/travelagencykata/aplication/port/CustomersRepository.java) 
 no encaja con la interfaz [CustomersJPARepository](src/main/java/com/breadhardit/travelagencykata/infrastructure/persistence/repository/CustomersJPARepository.java) 
 así que para que encaje, tendremos que aplicar un patrón de diseño... pero, cúal?
 
